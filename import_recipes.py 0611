@@ -1,13 +1,17 @@
-import requests
 import json
+import requests
+import os
+import sys
+import math
+import re # For more robust unit checking
 import time
-from collections import defaultdict
 
 # --- Configuration ---
-BASE_URL = 'http://192.168.000.000' # !!! VERIFY THIS IP ADDRESS IS CORRECT FOR YOUR COCKTAILPI SERVER !!!
-USERNAME = 'admin' # !!! UPDATED USERNAME !!!
-PASSWORD = '123456' # !!! UPDATED PASSWORD !!!
+BASE_URL = os.environ.get("COCKTAILPI_BASE_URL", "http://192.168.000.000")
+USERNAME = os.environ.get("COCKTAILPI_USERNAME", "admin")
+PASSWORD = os.environ.get("COCKTAILPI_PASSWORD", "123456")
 COCKTAILS_DATA_FILE = 'cocktails_with_details_gemini.json'
+RECIPES_FOLDER = "recipes_to_import" # Ensure this matches your folder name
 
 # --- API Endpoints ---
 LOGIN_URL = f"{BASE_URL}/api/auth/login"
@@ -22,134 +26,265 @@ session = requests.Session()
 access_token = None
 token_type = 'Bearer'
 
-# --- Ingredient Classification and Mapping Rules ---
-# This is a key part of smart mapping.
-# The keys are keywords found in scraped ingredient names.
-# The values are the target names of CocktailPi ingredient *groups* or *specific ingredients*
-# you want to map to. Order matters for specific vs. general (e.g., 'creme de cacao' before 'liqueur').
-# IMPORTANT: Ensure these values (the right side of the colon) exist as exact lowercase names
-# in your CocktailPi's ingredient list (either as groups or individual ingredients).
-INGREDIENT_CLASSIFICATION_RULES = {
-    # Spirits
-    'vodka': 'vodka',
-    'gin': 'gin',
-    'rum': 'rum', # General rum group
-    'white rum': 'white rum',
-    'gold rum': 'gold rum',
-    'aged rum': 'aged rum',
-    'tequila': 'tequila',
-    'mezcal': 'mezcal',
-    'whiskey': 'whiskey', # General whiskey group
-    'bourbon': 'bourbon',
-    'rye': 'rye whiskey',
-    'scotch': 'scotch',
-    'brandy': 'brandy', # General brandy group
-    'cognac': 'cognac',
-    'pisco': 'pisco', # Specific spirit, if not under 'brandy' group
-    'dry gin': 'gin', # map specific gin types to general gin
+# --- Global variable to store the ID of ingredient groups ---
+# This will be populated during fetch_cocktailpi_data()
+COCKTAILPI_GROUP_IDS = {}
 
-    # Liqueurs (more specific first)
-    'blue curaçao': 'blue curaçao', # If you have it specific
-    'creme de cacao': 'chocolate liqueur', # Maps to a specific liqueur or a 'sweet liqueurs' group
-    'creme de cassis': 'cassis liqueur',
-    'coffee liqueur': 'coffee liqueur',
-    'orange liqueur': 'orange liqueur', # For Triple Sec, Cointreau, Grand Marnier
-    'triple sec': 'orange liqueur',
-    'cointreau': 'orange liqueur',
-    'grand marnier': 'orange liqueur',
-    'amaretto': 'amaretto',
-    'peach schnapps': 'peach schnapps',
-    'elderflower liqueur': 'elderflower liqueur',
-    'absinthe': 'absinthe',
-    'liqueur': 'liqueur', # General fallback for any other liqueur
-    'aperol': 'aperol',
-    'campari': 'campari',
-    'schnapps': 'schnapps', # General schnapps (e.g., Apple schnapps)
+# --- Global variable to store the ID of categories ---
+# This will be populated during fetch_cocktailpi_data() and category creation
+COCKTAILPI_CATEGORY_IDS = {}
 
-    # Vermouths & Amari
-    'sweet vermouth': 'sweet vermouth',
-    'dry vermouth': 'dry vermouth',
-    'blanc vermouth': 'blanc vermouth',
-    'vermouth': 'vermouth', # General fallback for any vermouth
-    'amaro': 'amaro', # General amaro group
-    'fernet': 'fernet',
-    'lillet': 'lillet',
 
-    # Juices
-    'lemon juice': 'lemon juice',
-    'lime juice': 'lime juice',
-    'orange juice': 'orange juice',
-    'cranberry juice': 'cranberry juice',
-    'pineapple juice': 'pineapple juice',
-    'grapefruit juice': 'grapefruit juice',
-    'passion fruit juice': 'passion fruit juice',
-    'apple juice': 'apple juice',
-    'juice': 'juice', # General fallback for any other juice
+# --- Define the desired hierarchical groups and their parent relationships ---
+# Each tuple is (group_name, parent_group_name_or_None)
+GROUP_HIERARCHY = [
+    ('Spirits', None),
+    ('Vodka', 'Spirits'),
+    ('Gin', 'Spirits'),
+    ('Rum', 'Spirits'),
+    ('Whiskey', 'Spirits'),
+    ('Tequila & Mezcal', 'Spirits'),
+    ('Brandy & Cognac', 'Spirits'),
+    ('Other Spirits', 'Spirits'),
 
-    # Syrups
-    'simple syrup': 'simple syrup',
-    'sugar syrup': 'simple syrup',
-    'orgeat': 'orgeat syrup',
-    'grenadine': 'grenadine',
-    'honey syrup': 'honey syrup',
-    'agave nectar': 'agave nectar',
-    'syrup': 'syrup', # General fallback for any other syrup
-    'honey': 'honey syrup', # Map raw honey to honey syrup if dispensable
+    ('Liqueurs', None),
+    ('Orange Liqueurs', 'Liqueurs'),
+    ('Coffee Liqueurs', 'Liqueurs'),
+    ('Fruit Liqueurs', 'Liqueurs'),
+    ('Cream Liqueurs', 'Liqueurs'),
+    ('Herbal & Spice Liqueurs', 'Liqueurs'),
+    ('Schnapps', 'Liqueurs'),
+    ('Nut & Seed Liqueurs', 'Liqueurs'), # Added new group
+    ('Aperitifs & Digestifs', 'Liqueurs'), # Added new group
+    ('Other Liqueurs', 'Liqueurs'),
 
-    # Bitters
-    'bitters': 'bitters', # General bitters group
-    'angostura bitters': 'bitters',
-    'orange bitters': 'orange bitters',
-    'peychaud\'s bitters': 'peychauds bitters',
+    ('Vermouths & Amari', None),
+    ('Juices', None),
+    ('Syrups', None),
+    ('Bitters', None),
+    ('Mixers (Non-Alcoholic)', None),
+    ('Dairy & Cream', None),
+    ('Wines', None), # Added new group
+    ('Garnishes & Solids', None), # For things like mint, lime, egg, etc. that aren't dispensed
+    ('Other Manual Ingredients', None), # General fallback
+]
 
-    # Mixers (often carbonated or non-alcoholic liquids)
-    'soda water': 'soda water',
-    'club soda': 'soda water',
-    'tonic water': 'tonic water',
-    'cola': 'cola',
-    'sprite': 'lemon-lime soda',
-    'lemon-lime': 'lemon-lime soda',
-    'ginger ale': 'ginger ale',
-    'ginger beer': 'ginger beer',
-    'milk': 'milk',
-    'cream': 'cream',
-    'condensed milk': 'condensed milk',
+# Alcohol thresholds for determining base spirit category (by percentage of total alcohol volume)
+ALCOHOL_THRESHOLD_PRIMARY = 0.7 # If one spirit constitutes 70% or more of total alcohol
+ALCOHOL_THRESHOLD_SECONDARY = 0.3 # If a spirit constitutes 30% or more, add as secondary category
 
-    # Wines (if dispensable/categorized)
-    'sherry': 'sherry',
-    'prosecco': 'prosecco',
-    'champagne': 'champagne',
-    'cava': 'cava',
-    'dry white wine': 'dry white wine',
-
-    # Add more rules as needed based on your scraped data and CocktailPi setup
-    # Make sure keys are lowercase and values are exact lowercase CocktailPi names.
+# Mapping of alcohol types to their corresponding category names (must exist or be created)
+# These will be the actual category names in CocktailPi's UI
+SPIRIT_TO_CATEGORY_MAP = {
+    'vodka': 'Vodka-based',
+    'gin': 'Gin-based',
+    'rum': 'Rum-based', # For generic rum and its subtypes (Demerara, Dark Jamaican)
+    'whiskey': 'Whiskey-based',
+    'tequila': 'Tequila-based',
+    'mezcal': 'Tequila-based',
+    'brandy': 'Brandy-based',
+    'cognac': 'Brandy-based',
+    'calvados': 'Brandy-based',
+    'pisco': 'Brandy-based',
+    'liqueur': 'Liqueur-based', # Generic for liqueurs
+    'aperol': 'Aperitif-based',
+    'campari': 'Aperitif-based',
+    'sloe gin': 'Liqueur-based',
+    'southern comfort': 'Liqueur-based',
+    'absinthe': 'Liqueur-based',
+    'sherry': 'Wine-based',
+    'prosecco': 'Wine-based',
+    'champagne': 'Wine-based',
+    'cava': 'Wine-based',
+    'dry white wine': 'Wine-based',
+    'alcohol': 'Mixed Spirits', # For very generic 'alcohol'
+    'whiskey or vodka': 'Mixed Spirits', # For ambiguous mixes
+    # Add other categories as needed based on your cocktail types
+    'non-alcoholic': 'Non-alcoholic', # For non-alcoholic drinks
+    'mixed spirits': 'Mixed Spirits', # For drinks with several prominent spirits
 }
 
-# --- Ingredients that are typically garnishes or manual additions, not auto-created ---
-# This list prevents the script from trying to create things like 'ice cubes' or 'mint leaves' as ingredients.
+
+# --- Define properties for specific ingredients ---
+# This dictionary maps scraped ingredient names (lowercase) to detailed metadata.
+# 'target_cp_name': The exact name to use in CocktailPi (defaults to scraped name if omitted).
+# 'group_name': The desired parent group name for auto-creation. This must be in GROUP_HIERARCHY.
+# 'is_pumpable': True/False, determines 'onPump' property.
+# 'alcohol_content': Estimated ABV for categorization and alcohol volume calculation.
+# Order matters for lookup: more specific terms before general terms.
+INGREDIENT_DEFINITIONS = {
+    # SPIRITS
+    'vodka': {'group_name': 'Vodka', 'is_pumpable': True, 'alcohol_content': 40},
+    'gin': {'group_name': 'Gin', 'is_pumpable': True, 'alcohol_content': 40},
+    'dry gin': {'target_cp_name': 'gin', 'group_name': 'Gin', 'is_pumpable': True, 'alcohol_content': 40},
+    'rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40},
+    'white rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40},
+    'gold rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40},
+    'aged rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40},
+    'demerara rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40}, # Separate, pumpable
+    'dark jamaican rum': {'group_name': 'Rum', 'is_pumpable': True, 'alcohol_content': 40}, # Separate, pumpable
+    'tequila': {'group_name': 'Tequila & Mezcal', 'is_pumpable': True, 'alcohol_content': 40},
+    'mezcal': {'group_name': 'Tequila & Mezcal', 'is_pumpable': True, 'alcohol_content': 40},
+    'whiskey': {'group_name': 'Whiskey', 'is_pumpable': True, 'alcohol_content': 40},
+    'bourbon': {'group_name': 'Whiskey', 'is_pumpable': True, 'alcohol_content': 40},
+    'rye': {'target_cp_name': 'rye whiskey', 'group_name': 'Whiskey', 'is_pumpable': True, 'alcohol_content': 40},
+    'scotch': {'group_name': 'Whiskey', 'is_pumpable': True, 'alcohol_content': 40},
+    'brandy': {'group_name': 'Brandy & Cognac', 'is_pumpable': True, 'alcohol_content': 40},
+    'cognac': {'group_name': 'Brandy & Cognac', 'is_pumpable': True, 'alcohol_content': 40},
+    'pisco': {'group_name': 'Other Spirits', 'is_pumpable': True, 'alcohol_content': 40},
+    'calvados': {'group_name': 'Brandy & Cognac', 'is_pumpable': True, 'alcohol_content': 40},
+    'southern comfort': {'group_name': 'Other Spirits', 'is_pumpable': True, 'alcohol_content': 35},
+    'alcohol': {'group_name': 'Other Spirits', 'is_pumpable': True, 'alcohol_content': 40},
+
+    # LIQUEURS
+    'blue curaçao': {'group_name': 'Orange Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'creme de cacao': {'target_cp_name': 'chocolate liqueur', 'group_name': 'Herbal & Spice Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'crème de cacao': {'target_cp_name': 'chocolate liqueur', 'group_name': 'Herbal & Spice Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'creme de cassis': {'group_name': 'Fruit Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'coffee liqueur': {'group_name': 'Coffee Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'orange liqueur': {'group_name': 'Orange Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'triple sec': {'target_cp_name': 'orange liqueur', 'group_name': 'Orange Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'cointreau': {'target_cp_name': 'orange liqueur', 'group_name': 'Orange Liqueurs', 'is_pumpable': True, 'alcohol_content': 40},
+    'grand marnier': {'target_cp_name': 'orange liqueur', 'group_name': 'Orange Liqueurs', 'is_pumpable': True, 'alcohol_content': 40},
+    'amaretto': {'group_name': 'Nut & Seed Liqueurs', 'is_pumpable': True, 'alcohol_content': 28},
+    'peach schnapps': {'group_name': 'Schnapps', 'is_pumpable': True, 'alcohol_content': 20},
+    'apple schnapps': {'group_name': 'Schnapps', 'is_pumpable': True, 'alcohol_content': 20},
+    'elderflower liqueur': {'group_name': 'Herbal & Spice Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'absinthe': {'group_name': 'Herbal & Spice Liqueurs', 'is_pumpable': True, 'alcohol_content': 60},
+    'liqueur': {'group_name': 'Other Liqueurs', 'is_pumpable': True, 'alcohol_content': 20},
+    'aperol': {'group_name': 'Aperitifs & Digestifs', 'is_pumpable': True, 'alcohol_content': 11},
+    'campari': {'group_name': 'Aperitifs & Digestifs', 'is_pumpable': True, 'alcohol_content': 24},
+    'cynar': {'group_name': 'Aperitifs & Digestifs', 'is_pumpable': True, 'alcohol_content': 16.5},
+    'select': {'group_name': 'Aperitifs & Digestifs', 'is_pumpable': True, 'alcohol_content': 17.5},
+    'sloe gin': {'group_name': 'Fruit Liqueurs', 'is_pumpable': True, 'alcohol_content': 25}, # Classified as a liqueur
+    'pimento liqueur': {'target_cp_name': 'pimento dram', 'group_name': 'Herbal & Spice Liqueurs', 'is_pumpable': True, 'alcohol_content': 22},
+
+    # VERMOUTHS & AMARI
+    'sweet vermouth': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 16},
+    'dry vermouth': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 18},
+    'blanc vermouth': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 16},
+    'vermouth': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 17},
+    'amaro': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 25},
+    'fernet': {'group_name': 'Vermouths & Amari', 'is_pumpable': True, 'alcohol_content': 40},
+    'lillet': {'group_name': 'Aperitifs & Digestifs', 'is_pumpable': True, 'alcohol_content': 17},
+
+    # JUICES
+    'lemon juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'lime juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'orange juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'cranberry juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'pineapple juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'grapefruit juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'passion fruit juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'apple juice': {'group_name': 'Juices', 'is_pumpable': True},
+    'pineapple juice or syrup': {'target_cp_name': 'pineapple juice', 'group_name': 'Juices', 'is_pumpable': True},
+    'fruit juices': {'group_name': 'Juices', 'is_pumpable': True},
+    'juice': {'group_name': 'Juices', 'is_pumpable': True},
+
+    # SYRUPS
+    'simple syrup': {'group_name': 'Syrups', 'is_pumpable': True},
+    'sugar syrup': {'target_cp_name': 'simple syrup', 'group_name': 'Syrups', 'is_pumpable': True},
+    'orgeat': {'target_cp_name': 'orgeat syrup', 'group_name': 'Syrups', 'is_pumpable': True},
+    'grenadine': {'group_name': 'Syrups', 'is_pumpable': True},
+    'grenadine syrup': {'target_cp_name': 'grenadine', 'group_name': 'Syrups', 'is_pumpable': True},
+    'honey syrup': {'group_name': 'Syrups', 'is_pumpable': True},
+    'agave nectar': {'group_name': 'Syrups', 'is_pumpable': True},
+    'syrup': {'group_name': 'Syrups', 'is_pumpable': True},
+    'honey': {'group_name': 'Other Manual Ingredients', 'is_pumpable': False}, # Raw honey not pumpable
+
+    # BITTERS
+    'angostura bitters': {'group_name': 'Bitters', 'is_pumpable': True, 'alcohol_content': 45},
+    'orange bitters': {'group_name': 'Bitters', 'is_pumpable': True, 'alcohol_content': 40},
+    'peychaud\'s bitters': {'target_cp_name': 'peychauds bitters', 'group_name': 'Bitters', 'is_pumpable': True, 'alcohol_content': 35},
+    'bitters': {'group_name': 'Bitters', 'is_pumpable': True, 'alcohol_content': 40},
+    'aromatic spirits': {'target_cp_name': 'aromatic bitters', 'group_name': 'Bitters', 'is_pumpable': True, 'alcohol_content': 40},
+
+    # MIXERS (Non-Alcoholic)
+    'soda water': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'club soda': {'target_cp_name': 'soda water', 'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'tonic water': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'cola': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'sprite': {'target_cp_name': 'lemon-lime soda', 'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'lemon-lime': {'target_cp_name': 'lemon-lime soda', 'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'ginger ale': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'ginger beer': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+    'drink mixers': {'group_name': 'Mixers (Non-Alcoholic)', 'is_pumpable': True},
+
+    # DAIRY & CREAM
+    'milk': {'group_name': 'Dairy & Cream', 'is_pumpable': False},
+    'cream': {'group_name': 'Dairy & Cream', 'is_pumpable': False},
+    'heavy cream': {'group_name': 'Dairy & Cream', 'is_pumpable': False},
+    'fresh cream': {'group_name': 'Dairy & Cream', 'is_pumpable': False},
+    'condensed milk': {'group_name': 'Dairy & Cream', 'is_pumpable': False},
+
+    # WINES
+    'sherry': {'group_name': 'Wines', 'is_pumpable': False, 'alcohol_content': 15},
+    'prosecco': {'group_name': 'Wines', 'is_pumpable': False, 'alcohol_content': 11},
+    'champagne': {'group_name': 'Wines', 'is_pumpable': False, 'alcohol_content': 12},
+    'cava': {'group_name': 'Wines', 'is_pumpable': False, 'alcohol_content': 11},
+    'dry white wine': {'group_name': 'Wines', 'is_pumpable': False, 'alcohol_content': 12},
+
+    # OTHER MANUAL INGREDIENTS (often not pumpable, or solids/garnishes)
+    'tabasco sauce': {'group_name': 'Other Manual Ingredients', 'is_pumpable': False},
+    'raw egg': {'group_name': 'Other Manual Ingredients', 'is_pumpable': False},
+    'vanilla': {'group_name': 'Other Manual Ingredients', 'is_pumpable': False},
+    'hierba buena leaf': {'group_name': 'Garnishes & Solids', 'is_pumpable': False},
+    'fruits': {'group_name': 'Garnishes & Solids', 'is_pumpable': False},
+    'whiskey or vodka': {'group_name': 'Other Spirits', 'is_pumpable': True, 'alcohol_content': 40}, # Ambiguous, but assume pumpable for dispensing.
+}
+
+
+# --- Ingredients that are typically garnishes or manual additions, NOT to be auto-created as dispense ingredients ---
+# These will primarily generate 'writtenInstruction' steps.
 COMMON_IMPLIED_ELEMENTS = [
     'ice', 'cubes', 'garnish', 'sprig', 'slice', 'wedge', 'peel', 'leaf',
     'cherry', 'olive', 'salt', 'sugar', 'nutmeg', 'cinnamon', 'to taste',
     'fill', 'top with', 'splash of', 'none', 'rim', 'dashes', 'drops', 'twist',
     'dash', 'drop', 'muddle', 'muddled', 'fresh', 'dry', 'whole', 'powder',
-    'water', 'hot water', 'coffee', 'tea', 'egg white', 'egg yolk', # These are often explicitly listed but are manual
-    'mint', 'lime', 'lemon', # If these appear alone, assume they are garnish/manual fruit
-    'orange', 'grapefruit', 'pineapple', 'cranberry', 'apple', 'passion fruit' # As whole fruits
+    'egg white', 'egg yolk', # These are often explicitly listed but are manual/instructional
+    'mint sprig', 'lemon twist', 'orange slice', 'apple slice', 'orange zest', 'lime wedge', 'lemon wedge', 'lime slice',
+    'crushed ice',
+    'ice cubes',
+    'orange slice or orange zest',
+    'lime',
 ]
 
-# --- Default values for auto-created ingredients ---
-# These will be created as manual ingredients (not on pump) by default
-AUTO_CREATE_DEFAULTS = {
-    'type': 'manual', # 'automated', 'manual', 'group'
-    'inBar': False,
-    'onPump': False, # This will be conditionally used
-    'alcoholContent': 0 # Default to 0, can be adjusted manually in CocktailPi later
-}
+# Units considered 'liquid' for defaulting logic (used for 5ml fallback)
+LIQUID_UNITS = ['cl', 'ml', 'oz', 'dash', 'tsp', 'tbsp', 'cup', 'part', 'parts', 'splash', 'fill']
 
-# --- Global variable to store the ID of a default parent group for auto-created ingredients ---
-# We will populate this during fetch_cocktailpi_data()
-DEFAULT_PARENT_GROUP_ID = None
+
+# --- Helper to get ingredient properties from INGREDIENT_DEFINITIONS ---
+def get_ingredient_properties(scraped_name_lower):
+    """
+    Looks up ingredient properties from INGREDIENT_DEFINITIONS based on the scraped name.
+    Prioritizes exact matches, then keyword matches.
+    Returns a dictionary with default values if no specific definition is found.
+    """
+    props = {
+        'target_cp_name': scraped_name_lower,
+        'group_name': 'Other Manual Ingredients', # Default fallback group
+        'is_pumpable': False, # Default to not pumpable
+        'alcohol_content': 0 # Default to 0 ABV
+    }
+
+    # Try exact match first
+    if scraped_name_lower in INGREDIENT_DEFINITIONS:
+        props.update(INGREDIENT_DEFINITIONS[scraped_name_lower])
+        return props
+
+    # Try keyword match (less specific, iterate through definitions)
+    for keyword, definition in INGREDIENT_DEFINITIONS.items():
+        if keyword in scraped_name_lower:
+            # If the keyword is general and the scraped name is more specific but not in definitions,
+            # we might still want to use the scraped name as target_cp_name.
+            # However, for classification, we use the definition's properties.
+            props.update(definition)
+            if 'target_cp_name' not in props:
+                 props['target_cp_name'] = scraped_name_lower # Use scraped name if target not specified
+            return props
+            
+    return props # Return defaults if no match found
+
 
 # --- Function to make authenticated GET requests ---
 def authenticated_get(endpoint, params=None):
@@ -165,7 +300,10 @@ def authenticated_get(endpoint, params=None):
     try:
         response = session.get(url, headers=headers, params=params)
         response.raise_for_status()
-        return response.json()
+        json_response = response.json()
+        if isinstance(json_response, dict) and 'content' in json_response:
+            return json_response['content']
+        return json_response
     except requests.exceptions.HTTPError as e:
         print(f"Error fetching {endpoint}: HTTP Error {e.response.status_code}. Response: {e.response.text}")
     except requests.exceptions.ConnectionError:
@@ -174,53 +312,136 @@ def authenticated_get(endpoint, params=None):
         print(f"An unexpected error occurred fetching {endpoint}: {e}")
     return None
 
+# --- Function to create a new ingredient group in CocktailPi ---
+def create_cocktailpi_group(name, parent_group_id=None):
+    if not access_token:
+        print("Error: Not logged in. Cannot create ingredient group.")
+        return None
+
+    print(f"  Attempting to create new CocktailPi ingredient group: '{name}'")
+    
+    ingredient_payload = {
+        'name': name,
+        'type': 'group',
+        'alcoholContent': 0,
+        'inBar': False,
+        'unit': 'ml', # Groups often show 'ml' unit in UI
+        'parentGroupId': parent_group_id
+    }
+    
+    json_payload_str = json.dumps(ingredient_payload)
+    print(f"  DEBUG: Sending group creation JSON payload for multipart: {json_payload_str}")
+
+    files_to_send = {
+        'ingredient': (
+            'blob',
+            json_payload_str,
+            'application/json'
+        )
+    }
+
+    headers = {
+        'Authorization': f"{token_type} {access_token}",
+        'Accept': 'application/json'
+    }
+
+    try:
+        response = session.post(CREATE_INGREDIENT_URL, files=files_to_send, headers=headers)
+        response.raise_for_status()
+        new_ingredient_group = response.json()
+        print(f"  Successfully created ingredient group '{name}' with ID: {new_ingredient_group['id']}")
+        COCKTAILPI_GROUP_IDS[name.lower().strip()] = new_ingredient_group['id'] # Store new group ID
+        return new_ingredient_group
+    except requests.exceptions.HTTPError as e:
+        response_text = e.response.text.lower()
+        if e.response.status_code == 409 or ("an ingredient with this name already exists!" in response_text and e.response.status_code == 400): 
+            print(f"  Info: Group '{name}' already exists on CocktailPi (Conflict/Bad Request). Retrieving its ID.")
+            existing_groups = authenticated_get('ingredient/', params={'name': name, 'filterGroups': 'true', 'size': 1})
+            if existing_groups:
+                for item in existing_groups:
+                    if item['name'].lower().strip() == name.lower().strip() and item['type'] == 'group':
+                        print(f"  Info: Retrieved ID for existing group '{name}': {item['id']}")
+                        COCKTAILPI_GROUP_IDS[name.lower().strip()] = item['id'] # Store existing group ID
+                        return item
+            print(f"  Warning: Could not retrieve ID for existing group '{name}'.")
+            return None
+        else:
+            print(f"  Error creating group '{name}': HTTP Error {e.response.status_code}. Response: {e.response.text}")
+            print(f"  DEBUG: Full HTTP error response for group '{name}': {e.response.text}")
+    except Exception as e:
+        print(f"  An unexpected error occurred creating group '{name}': {e}")
+    return None
+
 # --- Function to create a new ingredient in CocktailPi ---
 def create_cocktailpi_ingredient(name, ingredient_type='manual', alcohol_content=0, in_bar=False, on_pump=False, parent_group_id=None):
     if not access_token:
         print("Error: Not logged in. Cannot create ingredient.")
         return None
 
-    print(f"  Attempting to create new CocktailPi ingredient: '{name}'")
+    # Get properties from INGREDIENT_DEFINITIONS based on the ingredient's name
+    # Use the name that will be used in CocktailPi if a target_cp_name is defined, else use raw name
+    props = get_ingredient_properties(name.lower())
+    final_name = props['target_cp_name'] # Use the target name for creation
+    final_group_id = COCKTAILPI_GROUP_IDS.get(props['group_name'].lower()) # Look up group ID
+    final_is_pumpable = props['is_pumpable']
+    final_alcohol_content = props['alcohol_content']
+
+    print(f"  Attempting to create new CocktailPi ingredient: '{final_name}' (Type: {ingredient_type}, Group: '{props['group_name']}')")
     
+    unit = "teaspoon(s)" # Default for manual ingredients
+    if final_is_pumpable: # If pumpable, usually ml
+        unit = "ml" 
+
     ingredient_payload = {
-        'name': name,
+        'name': final_name,
         'type': ingredient_type,
-        'alcoholContent': alcohol_content,
+        'alcoholContent': final_alcohol_content,
         'inBar': in_bar,
+        'unit': unit,
+        'onPump': final_is_pumpable, # Set onPump directly from definition
+        'parentGroupId': final_group_id
     }
     
-    # Only include 'onPump' in the payload if the ingredient type is 'automated'.
-    if ingredient_type == 'automated':
-        ingredient_payload['onPump'] = on_pump
+    json_payload_str = json.dumps(ingredient_payload)
+    print(f"  DEBUG: Sending ingredient creation JSON payload for multipart: {json_payload_str}")
 
-    # IMPORTANT ADDITION: Include parentGroupId if provided
-    if parent_group_id:
-        ingredient_payload['parentGroupId'] = parent_group_id
-
-    print(f"  DEBUG: Sending ingredient creation payload: {json.dumps(ingredient_payload, indent=2)}")
+    files_to_send = {
+        'ingredient': (
+            'blob',
+            json_payload_str,
+            'application/json'
+        )
+    }
 
     headers = {
         'Authorization': f"{token_type} {access_token}",
-        'Content-Type': 'application/json', # Correctly set for JSON payload
         'Accept': 'application/json'
     }
+
     try:
-        # Use json= for JSON body, not data=
-        response = session.post(CREATE_INGREDIENT_URL, json=ingredient_payload, headers=headers)
+        response = session.post(CREATE_INGREDIENT_URL, files=files_to_send, headers=headers)
         response.raise_for_status()
         new_ingredient = response.json()
-        print(f"  Successfully created ingredient '{name}' with ID: {new_ingredient['id']}")
+        print(f"  Successfully created ingredient '{final_name}' with ID: {new_ingredient['id']}")
         return new_ingredient
     except requests.exceptions.HTTPError as e:
-        print(f"  DEBUG: Full HTTP error response for '{name}': {e.response.text}")
-        if e.response.status_code == 409: # Conflict - ingredient name already exists
-            print(f"  Info: Ingredient '{name}' already exists on CocktailPi (409 Conflict). Skipping creation.")
+        response_text = e.response.text.lower()
+        if e.response.status_code == 409 or ("an ingredient with this name already exists!" in response_text and e.response.status_code == 400): 
+            print(f"  Info: Ingredient '{final_name}' already exists on CocktailPi (Conflict/Bad Request). Retrieving its ID.")
+            existing_ingredient_data = authenticated_get('ingredient/', params={'name': final_name, 'size': 1})
+            if existing_ingredient_data:
+                for item in existing_ingredient_data:
+                    if item['name'].lower().strip() == final_name.lower().strip() and item['type'] != 'group':
+                        print(f"  Info: Retrieved ID for existing ingredient '{final_name}': {item['id']}")
+                        return item
+            print(f"  Warning: Could not retrieve ID for existing ingredient '{final_name}'.")
+            return None
         else:
-            print(f"  Error creating ingredient '{name}': HTTP Error {e.response.status_code}. Response: {e.response.text}")
+            print(f"  Error creating ingredient '{final_name}': HTTP Error {e.response.status_code}. Response: {e.response.text}")
+            print(f"  DEBUG: Full HTTP error response for '{final_name}': {e.response.text}")
     except Exception as e:
-        print(f"  An unexpected error occurred creating ingredient '{name}': {e}")
+        print(f"  An unexpected error occurred creating ingredient '{final_name}': {e}")
     return None
-
 
 # --- Main login function ---
 def login():
@@ -259,202 +480,408 @@ def login():
         print(f"An unexpected error occurred during login: {e}")
         return False
 
-# --- Fetch CocktailPi's existing data (Ingredients, Glasses, Categories) ---
+# --- Fetch CocktailPi's existing data (Ingredients, Glasses, Categories) and set up groups ---
 def fetch_cocktailpi_data():
-    global DEFAULT_PARENT_GROUP_ID # Declare global to modify it
+    global COCKTAILPI_GROUP_IDS, COCKTAILPI_CATEGORY_IDS
 
-    print("\nFetching existing CocktailPi ingredients...")
-    # Include all types (automated, manual, group) and all 'inBar' statuses for mapping
+    print("\nFetching existing CocktailPi ingredients and setting up groups...")
+    # First, get all existing ingredients and groups
     ingredient_params = {
         'filterManualIngredients': 'true',
         'filterAutomaticIngredients': 'true',
         'filterGroups': 'true',
-        'inBar': 'false' 
+        'inBar': 'false', # Fetch all ingredients, regardless of inBar status
+        'size': 1000 # Fetch more to reduce pagination
     }
     ingredients_data = authenticated_get('ingredient/', params=ingredient_params)
     
     ingredient_name_to_id = {}
-    group_name_to_id = {} # Store groups separately for default parent ID
     if ingredients_data:
         for item in ingredients_data:
             lower_name = item['name'].lower().strip()
             ingredient_name_to_id[lower_name] = item['id']
             if item['type'] == 'group':
-                group_name_to_id[lower_name] = item['id']
+                COCKTAILPI_GROUP_IDS[lower_name] = item['id']
 
-    print(f"Found {len(ingredient_name_to_id)} mappable ingredients/groups on CocktailPi.")
-    
-    # Attempt to find a suitable default parent group ID
-    if group_name_to_id:
-        if 'other liquids' in group_name_to_id:
-            DEFAULT_PARENT_GROUP_ID = group_name_to_id['other liquids']
-            print(f"Found 'Other Liquids' group (ID: {DEFAULT_PARENT_GROUP_ID}) for default parent.")
-        elif 'other' in group_name_to_id: # Fallback if 'other liquids' doesn't exist
-            DEFAULT_PARENT_GROUP_ID = group_name_to_id['other']
-            print(f"Found 'Other' group (ID: {DEFAULT_PARENT_GROUP_ID}) for default parent.")
-        elif 'manual ingredients' in group_name_to_id:
-            DEFAULT_PARENT_GROUP_ID = group_name_to_id['manual ingredients']
-            print(f"Found 'Manual Ingredients' group (ID: {DEFAULT_PARENT_GROUP_ID}) for default parent.")
-        else: # Take the first available group if no specific ones are found
-            DEFAULT_PARENT_GROUP_ID = list(group_name_to_id.values())[0]
-            print(f"Using first available group '{list(group_name_to_id.keys())[0]}' (ID: {DEFAULT_PARENT_GROUP_ID}) as default parent.")
-    else:
-        print("Warning: No ingredient groups found on CocktailPi. Auto-creation of ingredients may fail without a parent group ID.")
+    print(f"Found {len(ingredient_name_to_id)} mappable ingredients/groups on CocktailPi initially.")
+    print(f"Found {len(COCKTAILPI_GROUP_IDS)} existing ingredient groups.")
 
-    print("Fetching existing CocktailPi glasses...")
+    # Iterate through the defined GROUP_HIERARCHY to ensure all necessary groups exist
+    # Create groups in order to ensure parent groups exist before their children
+    for group_name, parent_group_name in GROUP_HIERARCHY:
+        lower_group_name = group_name.lower()
+        if lower_group_name not in COCKTAILPI_GROUP_IDS:
+            parent_id = COCKTAILPI_GROUP_IDS.get(parent_group_name.lower()) if parent_group_name else None
+            created_group = create_cocktailpi_group(group_name, parent_id)
+            if created_group:
+                COCKTAILPI_GROUP_IDS[lower_group_name] = created_group['id']
+            # Small delay after creation
+            time.sleep(0.1)
+        else:
+            print(f"  Group '{group_name}' (ID: {COCKTAILPI_GROUP_IDS[lower_group_name]}) already exists.")
+
+    print("\nFetching existing CocktailPi glasses...")
     glasses_data = authenticated_get('glass/')
     glass_name_to_id = {item['name'].lower().strip(): item['id'] for item in glasses_data} if glasses_data else {}
     print(f"Found {len(glass_name_to_id)} glasses on CocktailPi.")
 
-    print("Fetching existing CocktailPi categories...")
+    print("\nSetting up CocktailPi categories...")
     categories_data = authenticated_get('category/')
-    category_name_to_id = {item['name'].lower().strip(): item['id'] for item in categories_data} if categories_data else {}
-    print(f"Found {len(category_name_to_id)} categories on CocktailPi.")
+    # First, populate with existing categories
+    if categories_data:
+        for item in categories_data:
+            COCKTAILPI_CATEGORY_IDS[item['name'].lower().strip()] = item['id']
+    print(f"Found {len(COCKTAILPI_CATEGORY_IDS)} existing categories on CocktailPi.")
 
-    return ingredient_name_to_id, glass_name_to_id, category_name_to_id
+    # Ensure all categories needed for spirit-based classification exist
+    for category_name in set(SPIRIT_TO_CATEGORY_MAP.values()):
+        lower_category_name = category_name.lower().strip()
+        if lower_category_name not in COCKTAILPI_CATEGORY_IDS:
+            print(f"  Attempting to create new CocktailPi category: '{category_name}'")
+            category_payload = {
+                'name': category_name,
+                'description': f"Cocktails primarily based on {category_name.replace('-based', '')}"
+            }
+            headers = {
+                'Authorization': f"{token_type} {access_token}",
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            try:
+                response = session.post(CATEGORY_API_URL, json=category_payload, headers=headers)
+                response.raise_for_status()
+                new_category = response.json()
+                COCKTAILPI_CATEGORY_IDS[lower_category_name] = new_category['id']
+                print(f"  Successfully created category '{category_name}' with ID: {new_category['id']}")
+                time.sleep(0.1)
+            except requests.exceptions.HTTPError as e:
+                response_text = e.response.text.lower()
+                if e.response.status_code == 409 or ("a category with this name already exists!" in response_text and e.response.status_code == 400):
+                    print(f"  Info: Category '{category_name}' already exists on CocktailPi (Conflict/Bad Request). Retrieving its ID.")
+                    existing_categories = authenticated_get('category/', params={'name': category_name, 'size': 1})
+                    if existing_categories:
+                        for item in existing_categories:
+                            if item['name'].lower().strip() == lower_category_name:
+                                COCKTAILPI_CATEGORY_IDS[lower_category_name] = item['id']
+                                print(f"  Info: Retrieved ID for existing category '{category_name}': {item['id']}")
+                                break
+                else:
+                    print(f"  Error creating category '{category_name}': HTTP Error {e.response.status_code}. Response: {e.response.text}")
+                    print(f"  DEBUG: Full HTTP error response for category '{category_name}': {e.response.text}")
+            except Exception as e:
+                print(f"  An unexpected error occurred creating category '{category_name}': {e}")
+    
+    print(f"Final count of categories after setup: {len(COCKTAILPI_CATEGORY_IDS)}")
+
+
+    # Re-fetch all ingredients and groups to get the most up-to-date mapping after creation
+    updated_ingredients_data = authenticated_get('ingredient/', params=ingredient_params)
+    updated_ingredient_name_to_id = {}
+    if updated_ingredients_data:
+        for item in updated_ingredients_data:
+            lower_name = item['name'].lower().strip()
+            updated_ingredient_name_to_id[lower_name] = item['id']
+            # Also ensure all ingredients (including groups) have their parentGroupIds set
+            # for later lookup of base spirit types from classification rules
+            if 'parentGroupId' in item and item['parentGroupId'] is not None:
+                for group_name, group_id in COCKTAILPI_GROUP_IDS.items():
+                    if group_id == item['parentGroupId']:
+                        # Add the group_name to the ingredient's properties for later lookup
+                        # This is a bit of a hack, might need a proper ingredient cache if complexity grows
+                        if lower_name not in INGREDIENT_DEFINITIONS: # Don't overwrite explicit definitions
+                             INGREDIENT_DEFINITIONS[lower_name] = {'group_name': group_name}
+                             if 'type' in item: INGREDIENT_DEFINITIONS[lower_name]['type'] = item['type']
+                             if 'alcoholContent' in item: INGREDIENT_DEFINITIONS[lower_name]['alcohol_content'] = item['alcoholContent']
+                             if 'onPump' in item: INGREDIENT_DEFINITIONS[lower_name]['is_pumpable'] = item['onPump']
+                        break
+
+    print(f"Updated ingredient map after group/category setup: {len(updated_ingredient_name_to_id)} items.")
+    return updated_ingredient_name_to_id, glass_name_to_id, COCKTAILPI_CATEGORY_IDS
+
+
+# --- Function to determine base spirit categories for a recipe ---
+def determine_base_spirit_categories(dispensable_ingredients_list):
+    """
+    Analyzes the dispensable ingredients to determine appropriate base spirit categories.
+    Returns a list of CocktailPi category IDs.
+    """
+    total_alcohol_volume = 0
+    spirit_volumes = {} # {spirit_type: total_ml}
+
+    for ing_item in dispensable_ingredients_list:
+        ing_id = ing_item['ingredientId']
+        amount_ml = ing_item['amount']
+
+        # Find the ingredient name associated with this ID
+        ingredient_name_lower = None
+        for name, cp_id in ingredient_map.items(): # Use the global ingredient_map
+            if cp_id == ing_id:
+                ingredient_name_lower = name
+                break
+        
+        if ingredient_name_lower:
+            props = get_ingredient_properties(ingredient_name_lower)
+            alcohol_content = props.get('alcohol_content', 0)
+            
+            if alcohol_content > 0:
+                alcohol_volume_ml = amount_ml * (alcohol_content / 100.0)
+                total_alcohol_volume += alcohol_volume_ml
+
+                # Determine the primary spirit type for categorization
+                # Iterate through SPIRIT_TO_CATEGORY_MAP keys (which are typically spirit names)
+                # This needs to be smarter, likely looking at the group name or actual spirit type.
+                # For now, let's use the exact ingredient name, or general type if it's a liqueur mapped to a spirit.
+                base_spirit_type = None
+                for spirit_key, cat_name in SPIRIT_TO_CATEGORY_MAP.items():
+                    if spirit_key in ingredient_name_lower or props.get('group_name', '').lower().strip() == spirit_key:
+                        base_spirit_type = spirit_key # Use the key from the map as the spirit type
+                        break
+                
+                # Fallback to general spirit if it's an 'Other Spirits' group member
+                if not base_spirit_type and props.get('group_name', '').lower().strip() == 'other spirits' and alcohol_content > 0:
+                    base_spirit_type = 'other spirits' # Generic spirit type
+
+                if base_spirit_type:
+                    spirit_volumes[base_spirit_type] = spirit_volumes.get(base_spirit_type, 0) + alcohol_volume_ml
+        else:
+            print(f"  Warning: Ingredient with ID {ing_id} not found in current ingredient map. Cannot determine alcohol content.")
+
+
+    selected_category_ids = set()
+    
+    if total_alcohol_volume == 0 and dispensable_ingredients_list:
+        # If there are ingredients but no alcohol, it's non-alcoholic
+        non_alcoholic_cat_id = COCKTAILPI_CATEGORY_IDS.get('non-alcoholic')
+        if non_alcoholic_cat_id:
+            selected_category_ids.add(non_alcoholic_cat_id)
+        else:
+            print("  Warning: 'Non-alcoholic' category not found or created. Please add it manually if desired.")
+    
+    elif total_alcohol_volume > 0:
+        sorted_spirits = sorted(spirit_volumes.items(), key=lambda item: item[1], reverse=True)
+        
+        primary_spirit_type = None
+        if sorted_spirits:
+            # Check for primary spirit
+            top_spirit_volume = sorted_spirits[0][1]
+            if top_spirit_volume / total_alcohol_volume >= ALCOHOL_THRESHOLD_PRIMARY:
+                primary_spirit_type = sorted_spirits[0][0]
+                category_name = SPIRIT_TO_CATEGORY_MAP.get(primary_spirit_type.lower())
+                if category_name:
+                    cat_id = COCKTAILPI_CATEGORY_IDS.get(category_name.lower())
+                    if cat_id:
+                        selected_category_ids.add(cat_id)
+                        print(f"  Assigned primary category: '{category_name}' (based on {primary_spirit_type})")
+            
+            # Check for secondary spirits (for mixed drinks)
+            for spirit_type, volume in sorted_spirits:
+                if spirit_type == primary_spirit_type: # Skip if already handled as primary
+                    continue
+                if volume / total_alcohol_volume >= ALCOHOL_THRESHOLD_SECONDARY:
+                    category_name = SPIRIT_TO_CATEGORY_MAP.get(spirit_type.lower())
+                    if category_name:
+                        cat_id = COCKTAILPI_CATEGORY_IDS.get(category_name.lower())
+                        if cat_id:
+                            selected_category_ids.add(cat_id)
+                            print(f"  Assigned secondary category: '{category_name}' (based on {spirit_type})")
+
+        # Fallback for complex mixes not caught by thresholds, or if no primary found
+        if not selected_category_ids and total_alcohol_volume > 0:
+            mixed_cat_id = COCKTAILPI_CATEGORY_IDS.get('mixed spirits')
+            if mixed_cat_id:
+                selected_category_ids.add(mixed_cat_id)
+                print(f"  Assigned fallback category: 'Mixed Spirits' (no clear primary/secondary found).")
+            else:
+                print("  Warning: 'Mixed Spirits' category not found or created.")
+
+    # If no categories could be determined, default to 'Cocktails' if it exists.
+    if not selected_category_ids:
+        default_cocktails_cat_id = COCKTAILPI_CATEGORY_IDS.get('cocktails')
+        if default_cocktails_cat_id:
+            selected_category_ids.add(default_cocktails_cat_id)
+            print("  No specific categories determined, defaulting to 'Cocktails'.")
+        else:
+            print("  Warning: Default 'Cocktails' category not found or created.")
+
+
+    return list(selected_category_ids)
+
 
 # --- Function to build the recipe payload for CocktailPi ---
-def build_cocktailpi_recipe_payload(scraped_recipe, ingredient_mapping, default_glass_id, default_category_id):
+def build_cocktailpi_recipe_payload(scraped_recipe, ingredient_mapping, default_owner_id_resolved, default_glass_id_resolved):
     recipe_name = scraped_recipe.get('name')
     description = scraped_recipe.get('description', '')
     
     production_steps = []
-    dispensable_ingredients = []
+    # Use a dictionary to aggregate amounts by ingredient ID before converting to list
+    aggregated_dispensable_ingredients = {} 
     
-    # Iterate through ingredients from the scraped recipe
+    # Process ingredients from the scraped recipe
     for ing in scraped_recipe.get('ingredients', []):
-        ing_name_raw = ing.get('name', '')
-        ing_name_lower = ing_name_raw.lower().strip()
-        ing_amount_ml = ing.get('unit_ml')
-        
+        ing_name_raw = ing.get('name', '').strip()
+        ing_name_lower = ing_name_raw.lower()
+        ing_amount_scraped = ing.get('amount')
+        ing_unit_scraped = ing.get('unit', '').lower().strip()
+        ing_unit_ml_scraped = ing.get('unit_ml') # This is the converted ml amount from the scraper
+
         cocktailpi_ingredient_id = None
-        mapped_cocktailpi_name = None # Store the name we mapped to
+        mapped_cocktailpi_name = None 
 
-        # --- Check if it's a common implied element (garnish, non-liquid, etc.) ---
-        # This prevents auto-creation of things like 'ice cubes' or 'mint leaves' as ingredients.
-        # It also prevents adding explicit instructions for common terms.
-        if any(elem == ing_name_lower or (elem in ing_name_lower and len(ing_name_lower) - len(elem) < 3) for elem in COMMON_IMPLIED_ELEMENTS):
-            if ing_amount_ml is not None and ing_amount_ml > 0:
-                print(f"  Info: '{ing_name_raw}' has liquid amount but is considered an implied/non-dispensable element. Skipping for dispense.")
-            else:
-                print(f"  Info: Skipping implied non-dispensable ingredient '{ing_name_raw}'.")
-            
-            # Add as a written instruction if it's not a generic instruction itself
-            is_generic_instruction_term = any(elem == ing_name_lower for elem in ['ice', 'sugar', 'salt', 'water', 'none']) # Add other generic terms if needed
-            
-            if not is_generic_instruction_term:
-                instruction_message_parts = []
-                # Only add amount/unit if they're not part of the common elements list and are present
-                if ing.get('amount') is not None and str(ing.get('amount')).lower().strip() not in COMMON_IMPLIED_ELEMENTS and str(ing.get('amount')).lower().strip() != 'none':
-                    instruction_message_parts.append(str(ing['amount']))
-                if ing.get('unit') is not None and str(ing.get('unit')).lower().strip() not in COMMON_IMPLIED_ELEMENTS and str(ing.get('unit')).lower().strip() != 'none':
-                    instruction_message_parts.append(str(ing['unit']))
-                
-                instruction_message_parts.append(ing_name_raw) # Always include the ingredient name
+        # 1. Determine if it's a COMMON_IMPLIED_ELEMENT (garnish, non-dispensable instruction)
+        is_implied_element = False
+        for elem in COMMON_IMPLIED_ELEMENTS:
+            if elem == ing_name_lower or (elem in ing_name_lower and (len(ing_name_lower.replace(elem, '').strip()) < 3 or len(elem) > 5)):
+                 is_implied_element = True
+                 break
 
-                if instruction_message_parts:
-                    production_steps.append({
-                        "type": "writtenInstruction",
-                        "message": f"Add {' '.join(instruction_message_parts).strip()}"
-                    })
-            continue # Move to next ingredient
-
-
-        # --- Mapping Logic Hierarchy ---
-
-        # 1. Check for a direct match in CocktailPi's current ingredients (exact name)
-        if ing_name_lower in ingredient_mapping:
-            cocktailpi_ingredient_id = ingredient_mapping[ing_name_lower]
-            mapped_cocktailpi_name = ing_name_lower
-            print(f"  Info: Direct matched '{ing_name_raw}' to CocktailPi ingredient '{mapped_cocktailpi_name}'.")
-
-        # 2. Apply INGREDIENT_CLASSIFICATION_RULES (Smart Group/Specific Mapping)
-        # This attempts to map to a broader category/group in CocktailPi
-        if not cocktailpi_ingredient_id:
-            for keyword, target_cp_name in INGREDIENT_CLASSIFICATION_RULES.items():
-                if keyword in ing_name_lower:
-                    if target_cp_name in ingredient_mapping:
-                        cocktailpi_ingredient_id = ingredient_mapping[target_cp_name]
-                        mapped_cocktailpi_name = target_cp_name
-                        print(f"  Info: Classified '{ing_name_raw}' as '{keyword}', mapped to CocktailPi ingredient/group '{target_cp_name}'.")
-                        break # Found a classification match, no need to check other rules for this ingredient
-
-        # 3. Fallback to fuzzy matching (simple 'in' check, less reliable but catches some)
-        if not cocktailpi_ingredient_id:
+        # 2. Try to map ingredient name to existing CocktailPi ingredient ID using INGREDIENT_DEFINITIONS
+        props = get_ingredient_properties(ing_name_lower)
+        target_cp_name = props['target_cp_name']
+        
+        if target_cp_name in ingredient_mapping:
+            cocktailpi_ingredient_id = ingredient_mapping[target_cp_name]
+            mapped_cocktailpi_name = target_cp_name
+            print(f"  Info: Mapped '{ing_name_raw}' to CocktailPi ingredient '{mapped_cocktailpi_name}' (ID: {cocktailpi_ingredient_id}).")
+        else:
+            # Fallback for fuzzy matching against all existing ingredients if not directly mapped by definitions
             for cp_name, cp_id in ingredient_mapping.items():
                 if (ing_name_lower in cp_name or cp_name in ing_name_lower) and \
-                   (len(ing_name_lower) > 3 or len(cp_name) > 3): # Avoid matching very short, generic words
+                   (len(ing_name_lower) > 3 or len(cp_name) > 3):
                     cocktailpi_ingredient_id = cp_id
                     mapped_cocktailpi_name = cp_name
-                    print(f"  Info: Fuzzy matched '{ing_name_raw}' to CocktailPi ingredient '{mapped_cocktailpi_name}'.")
+                    print(f"  Info: Fuzzy matched '{ing_name_raw}' to CocktailPi ingredient '{mapped_cocktailpi_name}' (ID: {cocktailpi_ingredient_id}).")
                     break
-        
-        # --- Handle Unmapped Liquid Ingredients: Auto-Create if Applicable ---
-        if ing_amount_ml is not None and ing_amount_ml > 0 and not cocktailpi_ingredient_id:
-            # The name for auto-creation should be the original scraped name (raw case)
-            ingredient_to_create_name = ing_name_raw.strip()
 
-            if DEFAULT_PARENT_GROUP_ID is None:
-                print(f"  Warning: Ingredient '{ing_name_raw}' could not be matched. Auto-creation skipped: No default parent group ID found.")
-            else:
-                print(f"  Attempting to auto-create missing liquid ingredient '{ingredient_to_create_name}'...")
-                new_cp_ingredient = create_cocktailpi_ingredient(
-                    ingredient_to_create_name, # Use the raw name for creation
-                    ingredient_type=AUTO_CREATE_DEFAULTS['type'],
-                    alcohol_content=AUTO_CREATE_DEFAULTS['alcoholContent'],
-                    in_bar=AUTO_CREATE_DEFAULTS['inBar'],
-                    on_pump=AUTO_CREATE_DEFAULTS['onPump'],
-                    parent_group_id=DEFAULT_PARENT_GROUP_ID # Pass the default parent group ID
-                )
-                if new_cp_ingredient:
-                    cocktailpi_ingredient_id = new_cp_ingredient['id']
-                    # Add newly created ingredient to our local map for subsequent recipes in this run
-                    ingredient_mapping[new_cp_ingredient['name'].lower().strip()] = cocktailpi_ingredient_id
-                    mapped_cocktailpi_name = new_cp_ingredient['name'].lower().strip()
+
+        # Convert scraped amount to a suitable integer amount for CocktailPi API (in ml)
+        final_amount_ml = 0
+        try:
+            float_amount = 0.0
+
+            is_liquid_unit = any(re.search(r'\b' + unit + r'\b', ing_unit_scraped) for unit in LIQUID_UNITS)
+            # Use ingredient's pumpable status from definitions to help determine if it's a liquid for defaulting
+            is_liquid_definition = props.get('is_pumpable', False) # If something is defined as pumpable, it's liquid.
+
+            # Prioritize specific qualitative amounts for liquids
+            if isinstance(ing_amount_scraped, str) and ing_amount_scraped.lower().strip() in ['splash', 'fill', 'a few', 'to taste', 'dash', 'dashes', 'drops']:
+                if is_liquid_unit or is_liquid_definition:
+                    float_amount = 5.0 # Assign a default small liquid amount (e.g., 5ml)
+                    print(f"  Info: Interpreted qualitative amount '{ing_amount_scraped}' for '{ing_name_raw}' as a default liquid amount of {int(float_amount)}ml.")
                 else:
-                    print(f"  Warning: Ingredient '{ing_name_raw}' has a liquid amount but could not be matched/created. Will not be dispensed.")
-        elif ing_amount_ml is not None and ing_amount_ml > 0 and not cocktailpi_ingredient_id:
-             # This branch is for cases where auto-creation was deemed unsuitable (e.g., in COMMON_IMPLIED_ELEMENTS)
-             print(f"  Warning: Ingredient '{ing_name_raw}' has a liquid amount but could not be matched. Not suitable for auto-creation. Will not be dispensed.")
+                    # If it's a qualitative amount but not a liquid, set to 0 and handle as written instruction
+                    float_amount = 0.0
+                    print(f"  Warning: Qualitative amount '{ing_amount_scraped}' for non-liquid '{ing_name_raw}'. Setting amount to 0.")
+
+            elif ing_unit_ml_scraped is not None and (isinstance(ing_unit_ml_scraped, (int, float)) or (isinstance(ing_unit_ml_scraped, str) and str(ing_unit_ml_scraped).lower() != 'none')):
+                float_amount = float(ing_unit_ml_scraped)
+            elif ing_amount_scraped is not None and (isinstance(ing_amount_scraped, (int, float)) or (isinstance(ing_amount_scraped, str) and str(ing_amount_scraped).lower() != 'none')):
+                if ing_unit_scraped in ['cl']:
+                    float_amount = float(ing_amount_scraped) * 10
+                elif ing_unit_scraped in ['oz']:
+                    float_amount = float(ing_amount_scraped) * 29.5735
+                elif ing_unit_scraped in ['tsp']:
+                    float_amount = float(ing_amount_scraped) * 4.929
+                elif ing_unit_scraped in ['tbsp']:
+                    float_amount = float(ing_amount_scraped) * 14.787
+                elif ing_unit_scraped in ['item']:
+                    float_amount = float(ing_amount_scraped)
+                else:
+                    float_amount = float(ing_amount_scraped) # Default for unhandled units
+
+            # Apply 5ml default if it's a liquid-like ingredient and amount is zero/very small after initial parsing
+            # This also catches cases where numerical parsing resulted in 0 but it's a liquid.
+            if (float_amount == 0.0 or float_amount is None) and (is_liquid_unit or is_liquid_definition):
+                final_amount_ml = 5
+                print(f"  Info: Amount for liquid-like ingredient '{ing_name_raw}' was zero/missing. Defaulting to {final_amount_ml}ml.")
+            elif float_amount > 0 and float_amount < 1:
+                final_amount_ml = 1
+                print(f"  Info: Amount for '{ing_name_raw}' was {float_amount}ml. Rounded up to {final_amount_ml}ml.")
+            else:
+                final_amount_ml = int(round(float_amount))
+        except ValueError:
+            print(f"  Warning: Could not parse amount '{ing_amount_scraped}' or unit_ml '{ing_unit_ml_scraped}' for '{ing_name_raw}'. Setting amount to 0 for safety.")
+            final_amount_ml = 0
 
 
-        # --- Add to dispensable ingredients or written instructions ---
-        if ing_amount_ml is not None and ing_amount_ml > 0 and cocktailpi_ingredient_id:
-            # If it's a liquid amount AND we found/created a CocktailPi ingredient ID, add to dispensable list
-            dispensable_ingredients.append({
-                "amount": round(ing_amount_ml),
-                "scale": True,
-                "boostable": True,
-                "ingredientId": cocktailpi_ingredient_id
-            })
-        elif not cocktailpi_ingredient_id: # If still no ID for this ingredient, add as written instruction
-            # This 'else' covers cases where it's a liquid ingredient but couldn't be matched/created,
-            # or it's a non-liquid ingredient that wasn't covered by COMMON_IMPLIED_ELEMENTS
+        # --- Determine action: Implied, Dispensable, or Written Instruction ---
+        if is_implied_element:
             instruction_message_parts = []
-            if ing.get('amount') is not None and str(ing.get('amount')).lower().strip() not in COMMON_IMPLIED_ELEMENTS and str(ing.get('amount')).lower().strip() != 'none':
-                instruction_message_parts.append(str(ing['amount']))
-            if ing.get('unit') is not None and str(ing.get('unit')).lower().strip() not in COMMON_IMPLIED_ELEMENTS and str(ing.get('unit')).lower().strip() != 'none':
-                instruction_message_parts.append(str(ing['unit']))
-            
-            # Ensure the ingredient name itself is not just a general instruction (like 'ice')
-            if ing_name_lower not in [elem.lower() for elem in COMMON_IMPLIED_ELEMENTS]:
-                instruction_message_parts.append(ing_name_raw)
+            if ing_amount_scraped is not None and str(ing_amount_scraped).lower().strip() not in ['none', '0']:
+                instruction_message_parts.append(str(ing_amount_scraped))
+                if ing_unit_scraped and ing_unit_scraped not in ['none', 'item']:
+                    instruction_message_parts.append(ing_unit_scraped)
+            elif final_amount_ml > 0:
+                instruction_message_parts.append(f"{final_amount_ml}ml")
 
-            if instruction_message_parts:
+            instruction_message_parts.append(ing_name_raw)
+            
+            if len(instruction_message_parts) > 1 or (len(instruction_message_parts) == 1 and instruction_message_parts[0] != ing_name_raw):
                 production_steps.append({
                     "type": "writtenInstruction",
                     "message": f"Add {' '.join(instruction_message_parts).strip()}"
                 })
+                print(f"  Info: Classified '{ing_name_raw}' as an implied element. Added as written instruction.")
             else:
-                # This case should ideally be caught by COMMON_IMPLIED_ELEMENTS check earlier
-                print(f"  Info: No meaningful instruction for '{ing_name_raw}', skipping as written instruction.")
+                print(f"  Info: Skipping implied element '{ing_name_raw}' as a written instruction (too generic/already handled).")
+            continue # Move to next ingredient, do not add as dispensable
 
+        # If not implied, and no CocktailPi ID yet, try to auto-create.
+        if cocktailpi_ingredient_id is None:
+            print(f"  Info: Ingredient '{ing_name_raw}' not found in CocktailPi. Attempting to auto-create.")
+            new_cp_ingredient = create_cocktailpi_ingredient(
+                ing_name_raw, # Use the raw name for auto-creation logic
+            )
+            if new_cp_ingredient:
+                cocktailpi_ingredient_id = new_cp_ingredient['id']
+                # Update our local mapping to ensure this new ingredient is recognized in subsequent lookups
+                ingredient_map[new_cp_ingredient['name'].lower().strip()] = cocktailpi_ingredient_id
+                print(f"  Success: Auto-created '{new_cp_ingredient['name']}' (ID: {cocktailpi_ingredient_id}) and added to mapping.")
+                time.sleep(0.1) 
+            else:
+                print(f"  Error: Failed to auto-create ingredient '{ing_name_raw}'. This ingredient will be added as a written instruction.")
 
-    # Add all dispensable ingredients as one step
-    if dispensable_ingredients:
+        # If we now have an ID and a positive amount, add to aggregation
+        if cocktailpi_ingredient_id is not None and final_amount_ml > 0: 
+            # Add to or update the aggregated amount for this ingredient ID
+            aggregated_dispensable_ingredients[cocktailpi_ingredient_id] = \
+                aggregated_dispensable_ingredients.get(cocktailpi_ingredient_id, 0) + final_amount_ml
+            print(f"  Info: Aggregated '{ing_name_raw}' ({final_amount_ml}ml, ID: {cocktailpi_ingredient_id}). Current total for ID {cocktailpi_ingredient_id}: {aggregated_dispensable_ingredients[cocktailpi_ingredient_id]}ml.")
+        else:
+            # If ingredient could not be dispensed (no ID, or 0 amount), add as written instruction as fallback
+            instruction_message_parts = []
+            if final_amount_ml > 0:
+                instruction_message_parts.append(f"{final_amount_ml}ml")
+            elif ing_amount_scraped is not None and str(ing_amount_scraped).lower().strip() not in ['none', '0']:
+                instruction_message_parts.append(str(ing_amount_scraped))
+                if ing_unit_scraped:
+                    instruction_message_parts.append(ing_unit_scraped)
+            
+            instruction_message_parts.append(ing_name_raw)
+
+            if instruction_message_parts:
+                production_steps.append({
+                    "type": "writtenInstruction",
+                    "message": f"Add {' '.join(instruction_message_parts).strip()} (Manual or Unmapped)"
+                })
+                print(f"  Warning: Ingredient '{ing_name_raw}' could not be added as dispensable (ID: {cocktailpi_ingredient_id}, Amount: {final_amount_ml}). Added as written instruction.")
+            else:
+                print(f"  Info: Ingredient '{ing_name_raw}' could not be dispensed and no meaningful written instruction could be formed. Skipping.")
+
+    # After processing all ingredients, convert the aggregated dictionary to the final list format
+    final_dispensable_ingredients_list = []
+    for ing_id, total_amount in aggregated_dispensable_ingredients.items():
+        final_dispensable_ingredients_list.append({
+            "amount": int(round(total_amount)), # Ensure amount is integer
+            "scale": True,
+            "boostable": True,
+            "ingredientId": ing_id
+        })
+
+    # Add all collected dispensable ingredients as one 'addIngredients' step
+    if final_dispensable_ingredients_list:
         production_steps.append({
             "type": "addIngredients",
-            "stepIngredients": dispensable_ingredients
+            "stepIngredients": final_dispensable_ingredients_list
         })
     
     # Add preparation steps as written instructions
@@ -465,87 +892,97 @@ def build_cocktailpi_recipe_payload(scraped_recipe, ingredient_mapping, default_
                 "message": step.strip()
             })
     
-    # Fallback if no steps generated
+    # Fallback if no steps generated at all (should be rare with current logic)
     if not production_steps:
         production_steps.append({
             "type": "writtenInstruction",
             "message": "No specific instructions found for this recipe. Combine ingredients and serve."
         })
 
+    # Determine categories based on dispensable ingredients
+    category_ids_for_recipe = determine_base_spirit_categories(final_dispensable_ingredients_list)
+    if not category_ids_for_recipe:
+        # Fallback to general 'Cocktails' category if no specific base spirit categories were found
+        default_cocktails_cat_id = COCKTAILPI_CATEGORY_IDS.get('cocktails')
+        if default_cocktails_cat_id:
+            category_ids_for_recipe.append(default_cocktails_cat_id)
+
+
     payload = {
         "name": recipe_name,
-        "ownerId": 1, # Default owner is usually 'admin' with ID 1 after wipe
+        "ownerId": default_owner_id_resolved,
         "description": description,
         "productionSteps": production_steps,
-        "defaultGlassId": default_glass_id,
-        "categoryIds": [default_category_id] # Temporarily still using default, will enhance soon
+        "defaultGlassId": default_glass_id_resolved,
+        "categoryIds": list(set(category_ids_for_recipe)) # Ensure unique IDs and convert to list
     }
     
     return payload
 
 # --- Main execution flow ---
 if __name__ == '__main__':
-    if not login():
-        exit()
+    # Initialize global token variables for the main script scope
+    access_token = None
+    token_type = 'Bearer'
 
-    # ingredient_map now also includes group_name_to_id for default parent group finding
-    ingredient_map, glass_map, category_map = fetch_cocktailpi_data()
+    if not login():
+        sys.exit(1)
+
+    DEFAULT_OWNER_ID_RESOLVED = 1 # Assuming owner 'admin' or 'Bar' has ID 1
+
+    # ingredient_map will be updated dynamically during recipe processing
+    # COCKTAILPI_GROUP_IDS and COCKTAILPI_CATEGORY_IDS will be populated here
+    ingredient_map, glass_map, category_map_dummy = fetch_cocktailpi_data() # category_map_dummy is not used directly, COCKTAILPI_CATEGORY_IDS is global
 
     if not ingredient_map:
         print("Could not retrieve CocktailPi ingredients. Cannot proceed with recipe import.")
-        exit()
-    
-    # Default Glass ID (can be made dynamic later based on volume)
-    DEFAULT_GLASS_ID = 1 # Fallback to 1 if no common glass names found
+        sys.exit(1)
+
+    # Resolve default Glass ID
+    DEFAULT_GLASS_ID_RESOLVED = 1 # Fallback to 1 if no common glass names found during fetch
     if glass_map:
-        # Prioritize common cocktail glasses by name
-        DEFAULT_GLASS_ID = glass_map.get('cocktail glass',
-                             glass_map.get('coupe',
-                             glass_map.get('old fashioned glass',
-                             glass_map.get('highball glass',
-                             glass_map.get('shot glass', list(glass_map.values())[0] if glass_map else 1)))))
-    print(f"Using default glass ID: {DEFAULT_GLASS_ID} (from map or fallback)")
-
-
-    # Default Category ID (will be replaced by intelligent categorization)
-    DEFAULT_CATEGORY_ID = 7 # Fallback to 7 (often 'Other' or 'Classic')
-    if category_map:
-        # Prioritize 'Classic' or 'Other'
-        DEFAULT_CATEGORY_ID = category_map.get('classic',
-                                   category_map.get('other',
-                                   list(category_map.values())[0] if category_map else 7))
-    print(f"Using default category ID: {DEFAULT_CATEGORY_ID} (from map or fallback)")
+        DEFAULT_GLASS_ID_RESOLVED = glass_map.get('cocktail glass',
+                                    glass_map.get('coupe',
+                                    glass_map.get('old fashioned glass',
+                                    glass_map.get('highball glass',
+                                    glass_map.get('shot glass', list(glass_map.values())[0] if glass_map else 1)))))
+    print(f"\nResolved default glass ID: {DEFAULT_GLASS_ID_RESOLVED}")
+    print(f"All Ingredient Groups and Categories set up.")
 
 
     try:
-        with open(COCKTAILS_DATA_FILE, 'r', encoding='utf-8') as f:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        data_file_path = os.path.join(script_dir, RECIPES_FOLDER, COCKTAILS_DATA_FILE)
+        
+        with open(data_file_path, 'r', encoding='utf-8') as f:
             cocktails_to_import = json.load(f)
-        print(f"\nLoaded {len(cocktails_to_import)} recipes from {COCKTAILS_DATA_FILE}")
+        print(f"\nLoaded {len(cocktails_to_import)} recipes from {data_file_path}")
     except FileNotFoundError:
-        print(f"Error: {COCKTAILS_DATA_FILE} not found. Please run scrape_cocktail_details.py first.")
-        exit()
+        print(f"Error: {data_file_path} not found. Please ensure the 'recipes_to_import' folder exists and '{COCKTAILS_DATA_FILE}' is inside it, or run your scraping script again.")
+        sys.exit(1)
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {COCKTAILS_DATA_FILE}. Check file content.")
-        exit()
+        print(f"Error: Could not decode JSON from {data_file_path}. Check file content for syntax errors.")
+        sys.exit(1)
     except Exception as e:
-        print(f"An unexpected error occurred loading {COCKTAILS_DATA_FILE}: {e}")
-        exit()
+        print(f"An unexpected error occurred loading {data_file_path}: {e}")
+        sys.exit(1)
 
     # --- Fetch existing recipe names to prevent duplicates ---
     print("\nFetching existing recipes to check for duplicates...")
-    existing_recipes_data = authenticated_get('recipe/')
+    existing_recipes_data = authenticated_get('recipe/?size=1000') 
 
     existing_recipe_names = set()
     if existing_recipes_data and isinstance(existing_recipes_data, dict) and 'content' in existing_recipes_data:
         for recipe_dict in existing_recipes_data['content']:
             if isinstance(recipe_dict, dict) and 'name' in recipe_dict:
                 existing_recipe_names.add(recipe_dict['name'].lower().strip())
-        print(f"  Detected existing recipes as a dictionary with 'content' key.")
+    elif isinstance(existing_recipes_data, list):
+        for recipe_dict in existing_recipes_data:
+            if isinstance(recipe_dict, dict) and 'name' in recipe_dict:
+                existing_recipe_names.add(recipe_dict['name'].lower().strip())
     else:
         print(f"  Warning: Unexpected structure for existing recipes data. Cannot check for duplicates effectively. Data type: {type(existing_recipes_data)}")
-        # If it's not the expected dictionary structure, existing_recipe_names will remain empty,
-        # which means all recipes will be attempted for import, potentially leading to duplicates.
-
+    
     print(f"Found {len(existing_recipe_names)} existing recipes on CocktailPi.")
 
 
@@ -570,45 +1007,38 @@ if __name__ == '__main__':
             continue
 
         cocktailpi_payload = build_cocktailpi_recipe_payload(
-            cocktail, ingredient_map, DEFAULT_GLASS_ID, DEFAULT_CATEGORY_ID
+            cocktail, ingredient_map, DEFAULT_OWNER_ID_RESOLVED, DEFAULT_GLASS_ID_RESOLVED
         )
 
-        # Check if the generated payload has any meaningful steps before attempting to import
         has_meaningful_steps = False
-        for step in cocktailpi_payload['productionSteps']:
-            if step['type'] == 'addIngredients' and step['stepIngredients']:
-                has_meaningful_steps = True
-                break
-            if step['type'] == 'writtenInstruction' and step['message'] != "No specific instructions found for this recipe. Combine ingredients and serve.":
+        for step in cocktailpi_payload.get('productionSteps', []):
+            if step['type'] == 'addIngredients' and step.get('stepIngredients'):
+                if any(ing_item.get('amount', 0) > 0 for ing_item in step['stepIngredients']):
+                    has_meaningful_steps = True
+                    break
+            elif step['type'] == 'writtenInstruction' and step.get('message', '').strip() != "No specific instructions found for this recipe. Combine ingredients and serve.":
                 has_meaningful_steps = True
                 break
         
         if not has_meaningful_steps:
-            print(f"  Skipping '{cocktail_name}' - generated payload contains no meaningful dispense or instruction steps.")
+            print(f"  Skipping '{cocktail_name}' - generated payload contains no meaningful dispense or instruction steps after processing.")
             skipped_count += 1
             continue
 
         recipe_json_string = json.dumps(cocktailpi_payload)
         
-        # --- MODIFIED SECTION FOR RECIPE IMPORT ---
-        # CocktailPi's recipe API expects multipart/form-data.
-        # The 'recipe' key is crucial based on previous error logs.
-        # This uses the 4-tuple format for 'files' to be explicit about content type and headers for the part.
         files_to_send = {
             'recipe': (
-                f'{cocktail_name.replace(" ", "_")}.json',  # Filename for the multipart part (CocktailPi uses this)
-                recipe_json_string,                         # The JSON content as a string
-                'application/json',                         # Content-Type of THIS specific file part (the JSON itself)
-                {'Content-Disposition': f'form-data; name="recipe"; filename="{cocktail_name.replace(" ", "_")}.json"'} # Explicit Content-Disposition
+                f'{cocktail_name.replace(" ", "_").replace("/", "-")}.json',
+                recipe_json_string,
+                'application/json',
+                {'Content-Disposition': f'form-data; name="recipe"; filename="{cocktail_name.replace(" ", "_").replace("/", "-")}.json"'}
             )
         }
 
         import_headers = {
             'Authorization': f"{token_type} {access_token}",
-            # IMPORTANT: Keep Content-Type header REMOVED here.
-            # requests will automatically generate the TOP-LEVEL 'multipart/form-data'
-            # with the correct boundary header when 'files' is used.
-            'Accept': 'application/json' 
+            'Accept': 'application/json'    
         }
 
         print(f"  Attempting to import '{cocktail_name}' with multipart data using field 'recipe'...")
@@ -630,10 +1060,10 @@ if __name__ == '__main__':
             print(f"  An unexpected error occurred during import of '{cocktail_name}': {e}")
             skipped_count += 1
         
-        time.sleep(0.5) # Small delay to avoid overwhelming the API
+        time.sleep(0.5)
 
     print(f"\n--- Import Summary ---")
     print(f"Total recipes processed: {len(cocktails_to_import)}")
     print(f"Recipes successfully imported: {imported_count}")
-    print(f"Recipes skipped (due to missing data or import error): {skipped_count}")
+    print(f"Recipes skipped (due to missing data, processing error, or meaningful steps missing): {skipped_count}")
     print(f"Recipes skipped (due to being duplicates): {duplicate_count}")
