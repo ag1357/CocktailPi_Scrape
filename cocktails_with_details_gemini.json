@@ -1,0 +1,883 @@
+    {
+        "name": "20th century",
+        "url": "https://en.wikipedia.org/wiki/20th_century_(cocktail)",
+        "description": "A classic cocktail with a balanced blend of gin's botan>
+        "ingredients": [
+            {
+                "amount": 4.5,
+                "unit": "cl",
+                "name": "gin",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 2,
+                "unit": "cl",
+                "name": "Kina Lillet",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": 1.5,
+                "unit": "cl",
+                "name": "creme de cacao",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 2,
+                "unit": "cl",
+                "name": "lemon juice",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "lemon twist",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": [
+            "Shake with ice.",
+            "Strain into a cocktail glass.",
+            "Garnish with a lemon twist."
+        ]
+    },
+    {
+        "name": "20th Century",
+        "url": "https://en.wikipedia.org/wiki/20th_century_(cocktail)",
+        "description": "A classic cocktail with a balanced blend of gin's botanicals, the bitt>
+        "ingredients": [
+            {
+                "amount": 4.5,
+                "unit": "cl",
+                "name": "gin",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 2,
+                "unit": "cl",
+                "name": "Kina Lillet",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": 1.5,
+                "unit": "cl",
+                "name": "creme de cacao",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 2,
+                "unit": "cl",
+                "name": "lemon juice",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "lemon twist",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": [
+            "Shake with ice in a cocktail shaker.",
+            "Strain into a cocktail glass.",
+            "Garnish with a lemon twist."
+        ]
+    },
+    {
+        "name": "Acapulco cocktail",
+        "url": "https://en.wikipedia.org/wiki/Tequila#Cocktails",
+        "description": "Tequila is a distilled beverage made from the blue agave plant, offeri>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "blue agave",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": []
+    },
+    {
+        "name": "Adios motherfucker",
+        "url": "https://en.wikipedia.org/wiki/Long_Island_iced_tea#Recipes_and_variations",
+        "description": "A potent mix of five spirits, lemon juice, and simple syrup, lengthene>
+        "ingredients": [
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "Tequila",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "Vodka",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "White rum",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "Cointreau",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "Gin",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 30,
+                "unit": "ml",
+                "name": "Lemon juice",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 20,
+                "unit": "ml",
+                "name": "Simple syrup",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": "top with",
+                "unit": "None",
+                "name": "Cola",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "Lemon slice",
+                "unit_ml": null
+            }
+                  ],
+        "preparation": [
+            "Add all ingredients into a highball glass filled with ice.",
+            "Stir gently.",
+            "Optionally garnish with a lemon slice."
+        ]
+    },
+    {
+        "name": "Adonis",
+        "url": "https://en.wikipedia.org/wiki/Adonis_(cocktail)",
+        "description": "A lower-alcohol cocktail with the balanced flavors of dry sherry and s>
+        "ingredients": [
+            {
+                "amount": 4.5,
+                "unit": "cl",
+                "name": "dry sherry",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 4.5,
+                "unit": "cl",
+                "name": "sweet vermouth",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 2,
+                "unit": "dashes",
+                "name": "orange bitters",
+                "unit_ml": 1.4
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "orange peel or twist",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Combine ingredients with ice in a mixing glass.",
+            "Strain into a chilled glass.",
+            "Garnish with an orange peel or twist."
+        ]
+    },
+    },
+    {
+        "name": "Advocaat",
+        "url": "https://en.wikipedia.org/wiki/Advocaat",
+        "description": "A rich, creamy, smooth liqueur with a custard-like consistency. (Flavo>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "egg yolks",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "aromatic spirits",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "sugar",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "honey",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "brandy",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "vanilla",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "cream",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "condensed milk",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": []
+    },
+    {
+        "name": "Agua de Sevilla",
+        "url": "https://en.wikipedia.org/wiki/Agua_de_Sevilla",
+        "description": "A refreshing, fruity, and subtly boozy cocktail with notes of pineappl>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "pineapple juice or syrup",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "cava",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "splash",
+                "unit": "None",
+                "name": "whiskey",
+                "unit_ml": null
+            },
+            {
+                "amount": "splash",
+                "unit": "None",
+                "name": "cointreau",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "ice",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "heavy cream",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "splash",
+                "unit": "None",
+                "name": "rum",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "cognac",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "1",
+                "unit": "None",
+                "name": "leaf of hierba buena",
+                "unit_ml": null
+            }
+        ],
+              ],
+        "preparation": [
+            "Crush the ice until it is shaved.",
+            "Combine pineapple juice or syrup, cava, whiskey, and cointreau in a champagne gla>
+            "Optionally add a splash of rum or substitute cognac for cointreau. Heavy cream is>
+            "Garnish with a leaf of hierba buena."
+        ]
+    },
+    {
+        "name": "Agua de Valencia",
+        "url": "https://en.wikipedia.org/wiki/Agua_de_Valencia",
+        "description": "A refreshing and vibrant cocktail with the bubbly zest of cava or cham>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "cava",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "champagne",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "orange juice",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "vodka",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "gin",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": []
+    },
+    {
+        "name": "Agua loca",
+        "url": "https://en.wikipedia.org/wiki/Agua_loca",
+        "description": "A large-format communal drink, often fruit-based and alcoholic, histor>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "alcohol",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "sugar",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "lime juice",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "lemon juice",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "water",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "spices",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "milk",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "curd",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "butter",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "honey",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": []
+    },
+    {
+        "name": "Aguaymanto sour",
+        "url": "https://en.wikipedia.org/wiki/Pisco_sour#Different_variations",
+        "description": "A refreshing, tart, and frothy cocktail with a bright citrus flavor an>
+        "ingredients": [
+            {
+                "amount": 60,
+                "unit": "ml",
+                "name": "pisco",
+                "unit_ml": 60.0
+            },
+            {
+                "amount": 30,
+                "unit": "ml",
+                "name": "lemon juice",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 20,
+                "unit": "ml",
+                "name": "simple syrup",
+                "unit_ml": 20.0
+            },
+            {
+                "amount": 1,
+                "unit": "None",
+                "name": "egg white",
+                "unit_ml": null
+            },
+            {
+                "amount": "a few",
+                "unit": "dashes",
+                "name": "Angostura bitters",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Add pisco, lemon juice, simple syrup, and egg white to a shaker with ice.",
+            "Shake well.",
+            "Strain into a chilled goblet glass.",
+            "Garnish with a few dashes of Angostura bitters."
+        ]
+    },
+    {
+        "name": "Alabama slammer",
+        "url": "https://en.wikipedia.org/wiki/Alabama_slammer",
+        "description": "A fruity and sweet cocktail with almond notes from amaretto, balanced >
+        "ingredients": [
+            {
+                "amount": 0.5,
+                "unit": "oz",
+                "name": "Amaretto",
+                "unit_ml": 14.78675
+            },
+            {
+                "amount": 0.5,
+                "unit": "oz",
+                "name": "Southern Comfort",
+                "unit_ml": 14.78675
+            },
+            {
+                "amount": 0.5,
+                "unit": "oz",
+                "name": "Sloe Gin",
+                "unit_ml": 14.78675
+            },
+            {
+                "amount": "fill",
+                "unit": "None",
+                "name": "orange juice",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Pour amaretto, Southern Comfort, and sloe gin into a Collins glass filled with ic>
+            "Fill with orange juice."
+        ]
+    },
+    {
+        "name": "Alexander",
+        "url": "https://en.wikipedia.org/wiki/Alexander_(cocktail)",
+        "description": "A smooth and decadent cocktail with rich brandy, creamy crème de cacao>
+        "ingredients": [
+            {
+                "amount": 30,
+                "unit": "ml",
+                "name": "cognac",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 30,
+                "unit": "ml",
+                "name": "crème de cacao",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 30,
+                "unit": "ml",
+                "name": "cream",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "nutmeg",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Pour all ingredients into cocktail shaker filled with ice cubes.",
+            "Shake and strain into a chilled cocktail glass.",
+            "Garnish with freshly grated nutmeg."
+        ]
+    },
+    {
+        "name": "Amber moon",
+        "url": "https://en.wikipedia.org/wiki/Amber_moon",
+        "description": "A potent and unusual cocktail with a savory, slightly spicy flavor fro>
+        "ingredients": [
+            {
+                "amount": 3,
+                "unit": "oz",
+                "name": "whiskey or vodka",
+                "unit_ml": 88.7205
+            },
+            {
+                "amount": 1,
+                "unit": "None",
+                "name": "raw egg",
+                "unit_ml": null
+            },
+            {
+                "amount": "to taste",
+                "unit": "None",
+                "name": "Tabasco sauce",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Crack an egg into a tall glass, leaving the yolk unbroken.",
+            "Pour in whiskey or vodka.",
+            "Add Tabasco to taste, or serve on the side."
+        ]
+    },
+    {
+        "name": "Americano",
+        "url": "https://en.wikipedia.org/wiki/Americano_(cocktail)",
+        "description": "A bittersweet, refreshing aperitivo with herbal and citrus notes, leng>
+        "ingredients": [
+            {
+                "amount": 3,
+                "unit": "cl",
+                "name": "Campari",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 3,
+                "unit": "cl",
+                "name": "sweet vermouth",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": "a splash of",
+                "unit": "None",
+                "name": "soda water",
+                "unit_ml": null
+            },
+            {
+                "amount": 0.5,
+                "unit": "None",
+                "name": "orange slice",
+                "unit_ml": null
+            },
+            {
+                "amount": 1,
+                "unit": "None",
+                "name": "lemon twist",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Pour the Campari and vermouth over ice into an old fashioned glass.",
+            "Add a splash of soda water.",
+            "Garnish with half an orange slice and a lemon twist."
+        ]
+    },
+    {
+        "name": "Ancient Mariner",
+        "url": "https://en.wikipedia.org/wiki/Ancient_Mariner_(cocktail)",
+        "description": "A tropical tiki cocktail with the warm spice of pimento dram balanced >
+        "ingredients": [
+            {
+                "amount": 1,
+                "unit": "oz",
+                "name": "Demerara rum",
+                "unit_ml": 29.5735
+            },
+            {
+                "amount": 1,
+                "unit": "oz",
+                "name": "dark Jamaican rum",
+                "unit_ml": 29.5735
+            },
+            {
+                "amount": 0.25,
+                "unit": "oz",
+                "name": "Pimento liqueur",
+                "unit_ml": 7.393375
+            },
+            {
+                "amount": 0.75,
+                "unit": "oz",
+                "name": "lime juice",
+                "unit_ml": 22.180125
+            },
+            {
+                "amount": 0.5,
+                "unit": "oz",
+                "name": "grapefruit juice",
+                "unit_ml": 14.78675
+            },
+            {
+                "amount": 0.5,
+                "unit": "oz",
+                "name": "sugar syrup",
+                "unit_ml": 14.78675
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "crushed ice",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "lime",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "mint",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": [
+            "Combine Demerara rum, dark Jamaican rum, pimento liqueur, lime juice, grapefruit >
+            "Shake well.",
+            "Strain into a glass filled with crushed ice.",
+            "Garnish with a lime wedge or wheel and a mint sprig."
+        ]
+    },
+    {
+        "name": "Angel face",
+        "url": "https://en.wikipedia.org/wiki/Angel_face_(cocktail)",
+        "description": "A delicate balance of gin's botanicals, apricot brandy's fruity sweetn>
+        "ingredients": [
+            {
+                "amount": 3,
+                "unit": "cl",
+                "name": "gin",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 3,
+                "unit": "cl",
+                "name": "apricot brandy",
+                "unit_ml": 30.0
+            },
+            {
+                "amount": 3,
+                "unit": "cl",
+                "name": "Calvados",
+                "unit_ml": 30.0
+            }
+        ],
+        "preparation": [
+            "Pour all ingredients into cocktail shaker filled with ice cubes.",
+            "Shake and strain into a chilled cocktail glass."
+        ]
+    },
+    {
+        "name": "Aperol spritz",
+        "url": "https://en.wikipedia.org/wiki/Aperol_spritz",
+        "description": "A refreshing, bubbly cocktail with a bittersweet orange flavor and a h>
+        "ingredients": [
+            {
+                "amount": 9,
+                "unit": "cl",
+                "name": "Prosecco",
+                "unit_ml": 90.0
+            },
+            {
+                "amount": 6,
+                "unit": "cl",
+                "name": "Aperol",
+                "unit_ml": 60.0
+            },
+            {
+                "amount": 6,
+                "unit": "cl",
+                "name": "Campari",
+                "unit_ml": 60.0
+            },
+            {
+                "amount": 6,
+                "unit": "cl",
+                "name": "Cynar",
+                "unit_ml": 60.0
+            },
+            {
+                "amount": 6,
+                "unit": "cl",
+                "name": "Select",
+                "unit_ml": 60.0
+            },
+            {
+                "amount": "splash",
+                "unit": "None",
+                "name": "soda water",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Build all ingredients into a wine glass filled with ice.",
+            "Stir gently."
+        ]
+    },
+    {
+        "name": "Aperol sunrise",
+        "url": "https://en.wikipedia.org/wiki/Tequila_sunrise_(cocktail)#Variations",
+        "description": "A vibrant cocktail with a sweet and tart flavor profile, resembling a >
+        "ingredients": [
+            {
+                "amount": 45,
+                "unit": "ml",
+                "name": "tequila",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 90,
+                "unit": "ml",
+                "name": "orange juice",
+                "unit_ml": 90.0
+            },
+            {
+                "amount": 15,
+                "unit": "ml",
+                "name": "grenadine syrup",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "ice cubes",
+                "unit_ml": null
+            },
+            {
+                "amount": "0.5",
+                "unit": "slice",
+                "name": "orange",
+                "unit_ml": null
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "orange zest",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": [
+            "Pour tequila and orange juice directly into a highball glass filled with ice cube>
+            "Add the grenadine syrup to create a chromatic effect (sunrise).",
+            "Do not stir."
+        ]
+    },
+    {
+        "name": "Appletini",
+        "url": "https://en.wikipedia.org/wiki/Appletini",
+        "description": "A sweet and tart cocktail with a crisp apple flavor and a smooth vodka>
+        "ingredients": [
+            {
+                "amount": 4.5,
+                "unit": "cl",
+                "name": "Vodka",
+                "unit_ml": 45.0
+            },
+            {
+                "amount": 1.5,
+                "unit": "cl",
+                "name": "Apple schnapps",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 1.5,
+                "unit": "cl",
+                "name": "Cointreau",
+                "unit_ml": 15.0
+            },
+            {
+                "amount": 1,
+                "unit": "None",
+                "name": "Apple slice",
+                "unit_ml": null
+            },
+            {
+                "amount": 1,
+                "unit": "None",
+                "name": "Cherry",
+                "unit_ml": null
+            }
+        ],
+        "preparation": [
+            "Mix all ingredients in a shaker.",
+            "Strain into a chilled cocktail glass.",
+            "Garnish with an apple slice and a cherry."
+        ]
+    },
+    {
+        "name": "Aqua Velva",
+        "url": "https://en.wikipedia.org/wiki/Aqua_Velva_(cocktail)",
+        "description": "A vibrant blue cocktail with the combined flavors of gin, vodka, lemon>
+        "ingredients": [
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "Vodka",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "Gin",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "Lemon-lime",
+                "unit_ml": 5.0
+            },
+            {
+                "amount": "None",
+                "unit": "None",
+                "name": "Blue Curaçao",
+                "unit_ml": 5.0
+            }
+        ],
+        "preparation": []
+    }
+]
